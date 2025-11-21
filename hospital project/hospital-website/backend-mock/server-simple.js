@@ -1,19 +1,26 @@
 // Lightweight backend mock using only Node core modules so it can run without npm install.
 const http = require('http')
 const url = require('url')
+const { hospitals: mockHospitals, generateSlotsForDoctor } = require('./mockData')
 
 const PORT = 5000
 
+// Build a flat list of doctors from hospitals for quick lookup
+const doctors = []
+const hospitalsByDoctor = {}
+mockHospitals.forEach(hospital => {
+  if (hospital.doctors) {
+    hospital.doctors.forEach(doc => {
+      doctors.push(doc)
+      hospitalsByDoctor[doc.id] = hospital.id
+    })
+  }
+})
+
 const db = {
-  hospitals: [
-    { id: 'h1', name: 'City Health Center', city: 'Metroville', specialties: ['Cardiology', 'Dermatology'] },
-    { id: 'h2', name: 'Green Valley Hospital', city: 'Lakeview', specialties: ['Pediatrics', 'Orthopedics'] },
-  ],
-  doctors: [
-    { id: 'd1', name: 'Dr. Asha Kumar', specialty: 'Cardiology', fee: 500, hospital_id: 'h1' },
-    { id: 'd2', name: 'Dr. Rajesh Verma', specialty: 'Dermatology', fee: 400, hospital_id: 'h1' },
-    { id: 'd3', name: 'Dr. Meera Singh', specialty: 'Pediatrics', fee: 350, hospital_id: 'h2' },
-  ],
+  hospitals: mockHospitals,
+  doctors,
+  hospitalsByDoctor,
   appointments: {},
 }
 
@@ -31,11 +38,6 @@ function parseBody(req) {
       try { resolve(data ? JSON.parse(data) : {}) } catch (e) { resolve({}) }
     })
   })
-}
-
-function generateSlots(doctorId, date) {
-  const times = ['09:00','10:00','11:00','12:00','14:00','15:00','16:00']
-  return times.map((t, i) => ({ id: `${doctorId}-${date}-${i}`, time: t, available: true }))
 }
 
 const server = http.createServer(async (req, res) => {
@@ -96,8 +98,8 @@ const server = http.createServer(async (req, res) => {
   const docSlotsMatch = pathname.match(/^\/api\/doctors\/([^/]+)\/slots$/)
   if (docSlotsMatch && method === 'GET') {
     const id = docSlotsMatch[1]
-    const date = parsed.query.date || new Date().toISOString().slice(0,10)
-    const slots = generateSlots(id, date)
+    const days = parseInt(parsed.query.days || '7', 10)
+    const slots = generateSlotsForDoctor(id, days)
     return sendJson(res, 200, slots)
   }
 
